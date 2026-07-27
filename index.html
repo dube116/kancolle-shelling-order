@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>砲擊順序計算器</title>
+<style>
+:root{
+  --bg:#fbfbfa; --fg:#1a1a19; --dim:#6b6b68; --line:#e0dfdb; --card:#fff;
+  --accent:#2f6f4f; --warn:#a4501a; --pivot:#8a3d6b;
+}
+@media (prefers-color-scheme:dark){
+  :root{ --bg:#16171a; --fg:#e8e8e6; --dim:#9a9a96; --line:#2c2e33; --card:#1d1f23;
+         --accent:#6bbf92; --warn:#e0a06a; --pivot:#d18cb8; }
+}
+*{box-sizing:border-box}
+body{margin:0;padding:24px 20px 60px;background:var(--bg);color:var(--fg);
+  font:15px/1.6 system-ui,-apple-system,"Segoe UI","Noto Sans TC","Microsoft JhengHei",sans-serif}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-size:21px;margin:0 0 4px;font-weight:650;letter-spacing:-.01em}
+.sub{color:var(--dim);font-size:13px;margin:0 0 24px}
+.banner{border:1px solid var(--warn);border-left-width:4px;border-radius:6px;padding:10px 14px;
+  margin:0 0 20px;font-size:13.5px;color:var(--warn);
+  background:color-mix(in srgb,var(--warn) 9%,transparent)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-bottom:18px}
+h2{font-size:13px;margin:0 0 12px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+.fld{display:flex;flex-direction:column;gap:4px}
+.fld label{font-size:11px;color:var(--dim);font-weight:600}
+select{font:inherit;font-size:14px;padding:5px 8px;border:1px solid var(--line);border-radius:6px;
+  background:var(--card);color:var(--fg);min-width:104px}
+.slot label{font-variant-numeric:tabular-nums}
+.slot.pivot label{color:var(--pivot)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+button{font:inherit;font-size:13px;padding:5px 11px;border:1px solid var(--line);border-radius:999px;
+  background:transparent;color:var(--fg);cursor:pointer}
+button:hover{border-color:var(--accent);color:var(--accent)}
+.pat{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:19px;letter-spacing:.16em;
+  color:var(--accent);font-weight:600}
+.patnote{font-size:12px;color:var(--dim);margin-top:2px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+th{font-size:11px;color:var(--dim);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+th:first-child,td:first-child{text-align:left;font-weight:600}
+td.z{color:var(--dim);opacity:.45}
+.sep{border-left:1px solid var(--line)}
+tr.excl td{opacity:.4;font-style:italic}
+.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:999px;border:1px solid currentColor;
+  margin-left:6px;font-weight:600;vertical-align:1px}
+.tag.pv{color:var(--pivot)}
+.scroll{overflow-x:auto}
+ol.orders{margin:0;padding-left:22px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px}
+ol.orders li{margin:2px 0}
+ol.orders span{color:var(--dim)}
+.notes{font-size:13px;color:var(--dim)}
+.notes b{color:var(--warn)}
+.notes code{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:14px;margin-top:26px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    ⚠ 本頁面僅供演示，<b>不會維護</b> — 不保證後續更新、修正或與遊戲改版同步。
+  </div>
+
+  <h1>砲擊順序計算器</h1>
+  <p class="sub">依射程組成算出精確的出手順機率。模型 = PHP 5 <code>zend_qsort</code> ＋ 同射程公平硬幣，
+     窮舉所有比較分支求精確值（非模擬）。</p>
+
+  <div class="card">
+    <h2>射程組成</h2>
+    <div class="row" id="slots"></div>
+    <div class="presets" id="presets"></div>
+  </div>
+
+  <div class="card">
+    <h2>相對射程樣式</h2>
+    <div class="pat" id="pattern">—</div>
+    <div class="patnote" id="patnote"></div>
+  </div>
+
+  <div class="card">
+    <h2>出手順機率</h2>
+    <div class="scroll"><table id="matrix"></table></div>
+  </div>
+
+  <div class="card">
+    <h2>最可能的完整出手順</h2>
+    <ol class="orders" id="orders"></ol>
+  </div>
+
+  <div class="card">
+    <h2>觀察</h2>
+    <div class="notes" id="notes"></div>
+  </div>
+
+  <footer>
+    只有<b>相對</b>射程有影響（比較器只看差值符號）。機率一律是 <code>整數 / 2ⁿ</code> —— 滑鼠移到格子上看精確分數。<br>
+    模型由 TsunDB 抽樣資料還原並驗證：4037 個射程樣式、206 萬筆觀測，支撐違反 0，零擬合參數。<br>
+    <b>本頁僅供演示，不會維護。</b>
+  </footer>
+</div>
+
+<script id="core">
+/* ── 計算核心（純函式，不碰 DOM）───────────────────────────── */
+
+/* PHP 5 zend_qsort（php-src PHP-5.6 Zend/zend_qsort.c）
+   細節不可更動：中點取 floor、樞紐先 swap 到 begin、兩個掃描都測 > 0 */
+function zendQsort(a, cmp) {
+  if (a.length < 2) return;
+  const stack = [[0, a.length - 1]];
+  while (stack.length) {
+    let [begin, end] = stack.pop();
+    while (begin < end) {
+      const mid = begin + ((end - begin) >> 1);
+      const t = a[begin]; a[begin] = a[mid]; a[mid] = t;
+      let seg1 = begin + 1, seg2 = end;
+      for (;;) {
+        while (seg1 < seg2 && cmp(a[begin], a[seg1]) > 0) seg1++;
+        while (seg2 >= seg1 && cmp(a[seg2], a[begin]) > 0) seg2--;
+        if (seg1 >= seg2) break;
+        const u = a[seg1]; a[seg1] = a[seg2]; a[seg2] = u;
+        seg1++; seg2--;
+      }
+      const v = a[begin]; a[begin] = a[seg2]; a[seg2] = v;
+      if (seg2 - begin <= end - seg2) {
+        if (seg2 + 1 < end) stack.push([seg2 + 1, end]);
+        if (seg2 === begin) break;
+        end = seg2 - 1;
+      } else {
+        if (begin + 1 < seg2) stack.push([begin, seg2 - 1]);
+        begin = seg2 + 1;
+      }
+    }
+  }
+}
+
+const NEED = Symbol('need-coin');
+
+/* ranges[i] = 該艦射程（大者先出手）。回傳 Map: "i,j,k..." → 精確機率 */
+function exactDist(ranges) {
+  const n = ranges.length;
+  const out = new Map();
+  if (n === 0) return out;
+
+  function run(prefix, prob) {
+    let bi = 0;
+    const cmp = (x, y) => {
+      if (ranges[x] !== ranges[y]) return ranges[x] < ranges[y] ? 1 : -1;
+      if (bi >= prefix.length) throw NEED;      // 需要新硬幣 → 就地分岔
+      return prefix[bi++] ? 1 : -1;
+    };
+    const arr = Array.from({length: n}, (_, i) => i);
+    try {
+      zendQsort(arr, cmp);
+    } catch (e) {
+      if (e !== NEED) throw e;
+      run(prefix.concat(1), prob / 2);
+      run(prefix.concat(0), prob / 2);
+      return;
+    }
+    const k = arr.join(',');
+    out.set(k, (out.get(k) || 0) + prob);
+  }
+  run([], 1);
+  return out;
+}
+
+/* 由完整排列分佈算 slot 機率矩陣、先手率、期望順位 */
+function summarize(dist, n) {
+  const M = Array.from({length: n}, () => new Array(n).fill(0));
+  const expRank = new Array(n).fill(0);
+  for (const [key, p] of dist) {
+    const perm = key.split(',').map(Number);
+    for (let slot = 0; slot < n; slot++) {
+      M[perm[slot]][slot] += p;
+      expRank[perm[slot]] += p * (slot + 1);
+    }
+  }
+  return {M, expRank, first: M.map(r => r[0])};
+}
+
+/* 機率一定是 2 的冪次分母 → 還原精確分數 */
+function toFraction(p) {
+  if (p === 0) return '0';
+  if (p === 1) return '1';
+  for (let k = 1; k <= 45; k++) {
+    const d = Math.pow(2, k), num = p * d;
+    if (Math.abs(num - Math.round(num)) < 1e-9) return Math.round(num) + '/' + d;
+  }
+  return p.toFixed(6);
+}
+
+/* 相對樣式字母：A = 最長射程 */
+function relPattern(ranges) {
+  const uniq = [...new Set(ranges)].sort((a, b) => b - a);
+  return ranges.map(r => String.fromCharCode(65 + uniq.indexOf(r))).join('');
+}
+
+if (typeof module !== 'undefined') module.exports = {zendQsort, exactDist, summarize, toFraction, relPattern};
+</script>
+
+<script>
+/* ── UI ───────────────────────────────────────────────────── */
+const RANGES = [
+  {v: 4, label: '超長'}, {v: 3, label: '長'}, {v: 2, label: '中'},
+  {v: 1, label: '短'},   {v: 0, label: '— 不參加'}
+];
+const PRESETS = {
+  '大和武蔵特攻（最佳）': [4, 4, 2, 1, 1, 1],
+  '大和武蔵特攻（陷阱）': [4, 4, 1, 2, 2, 2],
+  '全艦同射程': [3, 3, 3, 3, 3, 3],
+  '戰艦3＋驅逐3': [3, 3, 3, 1, 1, 1],
+  '7 艦遊撃部隊': [3, 3, 2, 2, 1, 1, 1],
+  '先制對潛（僅 #2#4#6）': [0, 2, 0, 2, 0, 2]
+};
+
+let state = [4, 4, 2, 1, 1, 1];
+
+function buildSlots() {
+  const host = document.getElementById('slots');
+  host.innerHTML = '';
+
+  const nf = document.createElement('div');
+  nf.className = 'fld';
+  nf.innerHTML = '<label>艦數</label>';
+  const nsel = document.createElement('select');
+  for (let i = 2; i <= 7; i++) {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = i + ' 艦';
+    if (i === state.length) o.selected = true;
+    nsel.appendChild(o);
+  }
+  nsel.onchange = () => {
+    const n = +nsel.value;
+    while (state.length < n) state.push(state[state.length - 1] ?? 2);
+    state.length = n;
+    buildSlots(); render();
+  };
+  nf.appendChild(nsel);
+  host.appendChild(nf);
+
+  const active = state.filter(r => r > 0).length;
+  const pivotArrIdx = active >= 2 ? ((active - 1) >> 1) : -1;
+  let seen = -1;
+
+  state.forEach((r, i) => {
+    if (r > 0) seen++;
+    const isPivot = r > 0 && seen === pivotArrIdx;
+    const f = document.createElement('div');
+    f.className = 'slot fld' + (isPivot ? ' pivot' : '');
+    f.innerHTML = `<label>#${i + 1}${isPivot ? ' ◆樞紐' : ''}</label>`;
+    const s = document.createElement('select');
+    RANGES.forEach(rg => {
+      const o = document.createElement('option');
+      o.value = rg.v; o.textContent = rg.label;
+      if (rg.v === r) o.selected = true;
+      s.appendChild(o);
+    });
+    s.onchange = () => { state[i] = +s.value; buildSlots(); render(); };
+    f.appendChild(s);
+    host.appendChild(f);
+  });
+}
+
+function buildPresets() {
+  const host = document.getElementById('presets');
+  host.innerHTML = '';
+  Object.entries(PRESETS).forEach(([name, cfg]) => {
+    const b = document.createElement('button');
+    b.textContent = name;
+    b.onclick = () => { state = cfg.slice(); buildSlots(); render(); };
+    host.appendChild(b);
+  });
+}
+
+function heat(p, max) {
+  if (p <= 0) return 'transparent';
+  const t = Math.min(1, p / (max || 1));
+  return `color-mix(in srgb, var(--accent) ${(t * 26).toFixed(1)}%, transparent)`;
+}
+
+function render() {
+  const idx = [];                       // 參戰艦的原始站位
+  state.forEach((r, i) => { if (r > 0) idx.push(i); });
+  const ranges = idx.map(i => state[i]);
+  const n = ranges.length;
+
+  const patEl = document.getElementById('pattern');
+  const noteEl = document.getElementById('patnote');
+  const mt = document.getElementById('matrix');
+  const od = document.getElementById('orders');
+  const notes = document.getElementById('notes');
+
+  if (n < 2) {
+    patEl.textContent = '—';
+    noteEl.textContent = '至少要有 2 艘參戰艦。';
+    mt.innerHTML = ''; od.innerHTML = ''; notes.textContent = '';
+    return;
+  }
+
+  const pattern = relPattern(ranges);
+  patEl.textContent = pattern;
+  const tiers = new Set(ranges).size;
+  noteEl.textContent = `${n} 艘參戰、${tiers} 種射程`
+    + (idx.length !== state.length ? `（已排除 ${state.length - n} 艘不參加者，陣列因此縮短）` : '');
+
+  const dist = exactDist(ranges);
+  const {M, expRank, first} = summarize(dist, n);
+  const pivotArr = (n - 1) >> 1;
+
+  // 矩陣
+  let h = '<thead><tr><th>站位</th>';
+  for (let k = 0; k < n; k++) h += `<th>第 ${k + 1} 手</th>`;
+  h += '<th class="sep">先手率</th><th>期望順位</th></tr></thead><tbody>';
+  const maxCell = Math.max(...M.flat());
+  state.forEach((r, i) => {
+    if (r === 0) {
+      h += `<tr class="excl"><td>#${i + 1}</td><td colspan="${n + 2}">不參加此階段</td></tr>`;
+      return;
+    }
+    const a = idx.indexOf(i);
+    const pv = a === pivotArr;
+    h += `<tr><td>#${i + 1}${pv ? '<span class="tag pv">樞紐</span>' : ''}</td>`;
+    for (let k = 0; k < n; k++) {
+      const p = M[a][k];
+      h += p > 0
+        ? `<td style="background:${heat(p, maxCell)}" title="${toFraction(p)}">${(p * 100).toFixed(2)}%</td>`
+        : `<td class="z">–</td>`;
+    }
+    h += `<td class="sep" title="${toFraction(first[a])}"><b>${(first[a] * 100).toFixed(2)}%</b></td>`;
+    h += `<td>${expRank[a].toFixed(3)}</td></tr>`;
+  });
+  h += '</tbody>';
+  mt.innerHTML = h;
+
+  // 完整順序
+  const top = [...dist.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  od.innerHTML = top.map(([k, p]) =>
+    `<li>${k.split(',').map(x => '#' + (idx[+x] + 1)).join(' → ')}
+     <span>　${(p * 100).toFixed(2)}%　(${toFraction(p)})</span></li>`).join('');
+
+  // 觀察
+  const out = [];
+  out.push(`共 <b>${dist.size}</b> 種可能出手順（${n}! = ${fact(n)} 種排列中）。`);
+
+  const pvSlot = idx[pivotArr] + 1;
+  out.push(`陣列中點是第 ${pivotArr + 1} 個參戰艦 → <b>站位 #${pvSlot}</b> 是排序樞紐`
+    + (tiers === 1
+        ? `，先手率僅 <b>${(first[pivotArr] * 100).toFixed(2)}%</b>（= 1/2<sup>${n}</sup>，全隊最低），但幾乎必定在中段出手。`
+        : `。排序的第一個動作就是 <code>swap(#${idx[0] + 1}, #${pvSlot})</code>，`
+          + `所以 #${pvSlot} 的射程層對整個分割結構有不成比例的影響。`));
+
+  notes.innerHTML = out.map(s => '<p style="margin:0 0 8px">' + s + '</p>').join('');
+}
+
+function fact(n) { let r = 1; for (let i = 2; i <= n; i++) r *= i; return r; }
+
+buildSlots(); buildPresets(); render();
+</script>
+</body>
+</html>
