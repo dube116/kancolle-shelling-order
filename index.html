@@ -56,6 +56,9 @@ ol.orders span{color:var(--dim)}
 .notes b{color:var(--warn)}
 .notes code{font-family:ui-monospace,Menlo,monospace;font-size:12px}
 footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-top:14px;margin-top:26px}
+a{color:var(--accent);text-decoration:none;
+  border-bottom:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+a:hover{border-bottom-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -66,7 +69,9 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
 
   <h1>砲擊順序計算器</h1>
   <p class="sub">依射程組成算出精確的出手順機率。模型 = PHP 5 <code>zend_qsort</code> ＋ 同射程公平硬幣，
-     窮舉所有比較分支求精確值（非模擬）。</p>
+     窮舉所有比較分支求精確值（非模擬）。結論、推理過程與驗算數據見
+     <a href="https://docs.google.com/spreadsheets/d/1bcTUcsVv2NCclrwRiJTk_Ap2Y-8nU3HpdbdchtGmdnk"
+        target="_blank" rel="noopener">這份試算表</a>。</p>
 
   <div class="card">
     <h2>射程組成</h2>
@@ -97,7 +102,9 @@ footer{font-size:12px;color:var(--dim);border-top:1px solid var(--line);padding-
 
   <footer>
     只有<b>相對</b>射程有影響（比較器只看差值符號）。機率一律是 <code>整數 / 2ⁿ</code> —— 滑鼠移到格子上看精確分數。<br>
-    模型由 TsunDB 抽樣資料還原並驗證：4037 個射程樣式、206 萬筆觀測，支撐違反 0，零擬合參數。<br>
+    模型由 TsunDB 抽樣資料還原並驗證：4037 個射程樣式、206 萬筆觀測，支撐違反 0，零擬合參數 ——
+    完整推導與驗算數據見<a href="https://docs.google.com/spreadsheets/d/1bcTUcsVv2NCclrwRiJTk_Ap2Y-8nU3HpdbdchtGmdnk"
+       target="_blank" rel="noopener">試算表</a>。<br>
     <b>本頁僅供演示，不會維護。</b>
   </footer>
 </div>
